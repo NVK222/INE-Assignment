@@ -29,8 +29,8 @@ async function scrape(url: string, selectedOption: string) {
 
     await expect(priceBtn).toBeEnabled()
     await priceBtn.click()
+    await getPrice(page)
 
-    await page.waitForTimeout(10000)
     await browser.close()
 }
 
@@ -58,6 +58,38 @@ async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
     }
 
     await page.waitForTimeout(700);
+}
+
+
+async function getPrice(page: Page) {
+    const offerPanel = page.locator('div.offer-panel')
+    // Wait for it show success or fail
+    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+    const classes = await offerPanel.getAttribute("class")
+    if (classes?.includes("offer-ready")) {
+        const offerRow = page.locator("div.offer-row")
+        console.log("[SUCCESS] Price is:\n\n")
+
+        await cleanPrice(offerRow)
+    } else if (classes?.includes("offer-failed")) {
+        console.warn("[FAILURE] Retrying...\n\n")
+    } else {
+        console.warn("[FAILURE] Unreachable")
+    }
+}
+
+async function cleanPrice(offerRow: Locator) {
+    const children = offerRow.locator(":scope > *").visible()
+    for (let i = 0; i < await children.count(); i++) {
+        const el = children.nth(i)
+        const classes = await el.getAttribute("style")
+        const innerText = await el.innerText()
+        if (classes?.includes("line-through")) continue;
+        if (innerText.includes("%")) continue;
+        if (/[a-z]/i.test(innerText)) continue
+
+        console.log(await el.innerText())
+    }
 }
 
 scrape("https://demo.inelabteamdev.com/item/2507", "Regular")
