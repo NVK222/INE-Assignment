@@ -17,11 +17,9 @@ export async function retryUntil(action: () => Promise<void>, condition: () => P
 export async function validate(condition: () => Promise<void>, errorMsg: string) {
     try {
         await condition()
-        return true
     }
-    catch {
-        console.error(errorMsg)
-        return false
+    catch (e) {
+        throw new Error(errorMsg, { cause: e })
     }
 }
 

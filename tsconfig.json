@@ -1,0 +1,9 @@
+{
+    "compilerOptions": {
+        "types": [
+            "node"
+        ],
+        "allowImportingTsExtensions": true,
+        "noEmit": true
+    }
+}

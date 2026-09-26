@@ -2,61 +2,89 @@ import { type Browser, chromium, type Locator, type Page } from "playwright"
 import { expect } from "@playwright/test"
 import { fixPrice, retryUntil, validate } from "./utils.ts"
 
+const tracingEnabled = process.env.TRACE === "1"
+if (tracingEnabled) console.log("===== Starting TRACING =====")
+
 const products = [
-    { id: 2224, option: "Duo pack" },
+    { id: 2121, option: "Oak" },
     { id: 2789, option: "Stage bundle" },
     { id: 2235, option: "1-pack" },
     { id: 2111, option: "Regular" }
 ]
 
 const maxRetries = 4
+const BASEURL = "https://demo.inelabteamdev.com/item"
 
 async function init() {
     const browser = await chromium.launch({ headless: false })
     await Promise.allSettled(products.map(
-        (product) => scrape(browser, `https://demo.inelabteamdev.com/item/${product.id}`, product.option, maxRetries)
+        (product) => scrape(browser, product.id, product.option, maxRetries)
     ))
     await browser.close()
 }
 
-async function scrape(browser: Browser, url: string, selectedOption: string, maxRetries: number) {
+async function scrape(browser: Browser, id: number, selectedOption: string, maxRetries: number) {
+    let shouldTrace = false
+    const url = `${BASEURL}/${id}`
     const browserCtx = await browser.newContext()
+    if (tracingEnabled) {
+        await browserCtx.tracing.start({
+            screenshots: true,
+            snapshots: true,
+        })
+    }
     const page = await browserCtx.newPage()
     await page.goto(url)
 
     const cookieRejectLabel = page.getByLabel("Reject cookies")
 
+    const printer = (msg: string) => `[FAILURE] Product ID:  ${id}\tReason: ` + msg
+
     // Deal with cookie popup
     await page.addLocatorHandler(cookieRejectLabel, async () => {
-        await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), 3, "Cannot close cookie popup.")
+        await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), maxRetries, "Cannot close cookie popup.")
     })
 
     try {
+        //Check if product exists
+        const pageError = page.getByText("Error: product 404")
+        await validate(() => expect(pageError).not.toBeAttached(), "Product does not exist")
+
         // Check if selected option is present
         const optionBtn = page.getByRole("button", { name: selectedOption })
-        if (!await validate(() => expect(optionBtn).toBeAttached(), "Selected option is not present")) return;
+        await validate(() => expect(optionBtn).toBeAttached(), "Selected option is not present")
 
         // Click the selected option & validate
-        await retryUntil(() => optionBtn.click(), () => expect(optionBtn).toHaveAttribute("aria-pressed", "true"), 3, "Option cannot be selected")
+        await retryUntil(() => optionBtn.click(), () => expect(optionBtn).toHaveAttribute("aria-pressed", "true"), maxRetries, "Option cannot be selected")
 
         // Hover over the button to enable it
         const priceBtn = page.getByLabel("Check today’s price")
         await validate(() => expect(priceBtn).toBeAttached(), "Check price button is not present")
-        await retryUntil(() => enablePriceButtonWitHover(page, priceBtn), () => expect(priceBtn).toBeEnabled(), 3, "Cannot enable Check Price button")
+        await retryUntil(() => enablePriceButtonWitHover(page, priceBtn), () => expect(priceBtn).toBeEnabled(), maxRetries, "Cannot enable Check Price button")
 
         // Try scraping with max retries
         const [done, price] = await getPriceWithRetry(page, maxRetries)
+        shouldTrace = true
 
-        if (done) console.log(`Price ${price} scraped for option ${selectedOption}`)
-        else throw Error("Scraping failed")
+        if (done) console.log(`Product ID: ${id}\t\tPrice: ${price}\t\tOption: ${selectedOption}`)
+        else throw new Error("Scraping was unsuccesful. ");
     }
     catch (e) {
-        if (e instanceof Error) console.error(e.message)
+        if (e instanceof Error) console.error(printer(e.message))
         else console.error("Unknown error occured")
     }
     finally {
-        await browserCtx.close()
+        if (tracingEnabled) {
+            if (shouldTrace) {
+                await browserCtx.tracing.stop()
+            } else {
+                await browserCtx.tracing.stop({
+                    path: `traces/${id}.zip`
+                })
+            }
+        }
     }
+    await browserCtx.close()
 }
 
 async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
@@ -93,7 +121,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
     const priceBtn = page.getByLabel("Check today’s price")
     const retryBtn = page.getByRole("button", { name: "Retry" })
 
-    await retryUntil(() => priceBtn.click(), () => expect(priceBtn).not.toBeAttached({ timeout: 2000 }), 3, "Check today's price Button cannot be clicked.")
+    await retryUntil(() => priceBtn.click(), () => expect(priceBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Check today's price Button cannot be clicked.")
 
     for (let i = 0; i < maxRetries; i++) {
         const [done, price] = await getPrice(page)
@@ -102,7 +130,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
         await validate(() => expect(retryBtn).toBeAttached({ timeout: 2000 }), "Retry Button not found")
 
         await sleep(Math.pow(2, i) * 1000)
-        await retryUntil(() => retryBtn.click(), () => expect(retryBtn).not.toBeAttached({ timeout: 2000 }), 3, "Could not retry the price check")
+        await retryUntil(() => retryBtn.click(), () => expect(retryBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Could not retry the price check")
     }
     return [false, -1]
 }
@@ -120,7 +148,7 @@ async function getPrice(page: Page) {
         return [true, price]
     }
     else if (classes?.includes("offer-failed")) {
-        console.warn("Price check failed upstream. Retrying...\n\n")
+        console.warn("Price check failed upstream. Retrying...")
     }
     else {
         console.warn("Unreachable code")
