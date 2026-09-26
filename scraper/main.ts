@@ -27,6 +27,8 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
     let shouldTrace = false
     const url = `${BASEURL}/${id}`
     const browserCtx = await browser.newContext()
+
+
     if (tracingEnabled) {
         await browserCtx.tracing.start({
             screenshots: true,
@@ -34,7 +36,15 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
         })
     }
     const page = await browserCtx.newPage()
+
+    // A GET request to the api/v2/ui/manifest returns a respons that contains classes for prices
+    const manifestPromise = page.waitForResponse(response => response.request().method() === "GET" && response.request().url().includes("ui/manifest"))
     await page.goto(url)
+    const manifestResponse = await manifestPromise
+    const mainfestData = await manifestResponse.json()
+    console.log(mainfestData)
+    const actualPriceClass: string = mainfestData.classes.priceValue
+    console.log(actualPriceClass)
 
     const cookieRejectLabel = page.getByLabel("Reject cookies")
 
@@ -63,7 +73,7 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
         await retryUntil(() => enablePriceButtonWitHover(page, priceBtn), () => expect(priceBtn).toBeEnabled(), maxRetries, "Cannot enable Check Price button")
 
         // Try scraping with max retries
-        const [done, price] = await getPriceWithRetry(page, maxRetries)
+        const [done, price] = await getPriceWithRetry(page, maxRetries, actualPriceClass)
         shouldTrace = true
 
         if (done) console.log(`Product ID: ${id}\t\tPrice: ${price}\t\tOption: ${selectedOption}`)
@@ -112,7 +122,7 @@ async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
 }
 
 
-async function getPriceWithRetry(page: Page, maxRetries: number) {
+async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClass: string) {
     /*
     Try scraping the price with a automatic retries & exponential backoff
      */
@@ -124,7 +134,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
     await retryUntil(() => priceBtn.click(), () => expect(priceBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Check today's price Button cannot be clicked.")
 
     for (let i = 0; i < maxRetries; i++) {
-        const [done, price] = await getPrice(page)
+        const [done, price] = await getPrice(page, actualPriceClass)
         if (done) return [true, price];
 
         await validate(() => expect(retryBtn).toBeAttached({ timeout: 2000 }), "Retry Button not found")
@@ -135,7 +145,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
     return [false, -1]
 }
 
-async function getPrice(page: Page) {
+async function getPrice(page: Page, actualPriceClass: string) {
     const offerPanel = page.locator('div.offer-panel')
     // Wait for it show success or fail
     await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
@@ -143,8 +153,7 @@ async function getPrice(page: Page) {
     const classes = await offerPanel.getAttribute("class")
 
     if (classes?.includes("offer-ready")) {
-        const offerRow = page.locator("div.offer-row")
-        const price = await cleanPrice(offerRow)
+        const price = fixPrice(await page.locator(`.${actualPriceClass}`).innerText())
         return [true, price]
     }
     else if (classes?.includes("offer-failed")) {
@@ -154,20 +163,6 @@ async function getPrice(page: Page) {
         console.warn("Unreachable code")
     }
     return [false, -1]
-}
-
-async function cleanPrice(offerRow: Locator) {
-    const children = offerRow.locator(":scope > *").visible() // Only find children that are visible
-    for (let i = 0; i < await children.count(); i++) {
-        const el = children.nth(i)
-        const classes = await el.getAttribute("style")
-        const innerText = await el.innerText()
-
-        if (classes?.includes("line-through")) continue; // Strike through prices
-        if (innerText.includes("%")) continue; // Ignore X% Savings
-        if (/[a-z]/i.test(innerText)) continue // Ignore other alphabetical text
-        return fixPrice(innerText)
-    }
 }
 
 

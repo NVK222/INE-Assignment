@@ -23,6 +23,17 @@ export async function validate(condition: () => Promise<void>, errorMsg: string)
     }
 }
 
-export function fixPrice(price: string) {
-    return price.normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, "")
+export function fixPrice(text: string) {
+    const normalized = text
+        .normalize("NFKC")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, "")
+
+    const match = normalized.match(/(?:₹|Rs\.?)([\d,]+(?:\.\d+)?)/i)
+
+    if (!match) {
+        throw new Error(`Could not extract price from: ${text}`)
+    }
+
+    return match[1]
 }
