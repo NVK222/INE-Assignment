@@ -1,5 +1,6 @@
 import { type Browser, chromium, type Locator, type Page } from "playwright"
 import { expect } from "@playwright/test"
+import { fixPrice, retryUntil, validate } from "./utils.ts"
 
 const products = [
     { id: 2224, option: "Duo pack" },
@@ -10,9 +11,11 @@ const products = [
 
 const maxRetries = 4
 
-async function init(url: string, selectedOption: string, maxRetries: number) {
+async function init() {
     const browser = await chromium.launch({ headless: false })
-    await scrape(browser, url, selectedOption, maxRetries)
+    await Promise.allSettled(products.map(
+        (product) => scrape(browser, `https://demo.inelabteamdev.com/item/${product.id}`, product.option, maxRetries)
+    ))
     await browser.close()
 }
 
@@ -21,23 +24,25 @@ async function scrape(browser: Browser, url: string, selectedOption: string, max
     const page = await browserCtx.newPage()
     await page.goto(url)
 
-    // Deal with cookie popup
+    const cookieRejectLabel = page.getByLabel("Reject cookies")
 
-    await page.addLocatorHandler(page.getByLabel("Reject cookies"), async () => {
-        await page.getByLabel("Reject cookies").click()
-    }, { times: 1 })
+    // Deal with cookie popup
+    await page.addLocatorHandler(cookieRejectLabel, async () => {
+        await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), 3, "Cannot close cookie popup.")
+    })
 
     try {
-        // Select the option
+        // Check if selected option is present
         const optionBtn = page.getByRole("button", { name: selectedOption })
-        await expect(optionBtn).toBeAttached()
-        await optionBtn.click()
-        await expect(optionBtn).toHaveAttribute("aria-pressed", "true")
+        if (!await validate(() => expect(optionBtn).toBeAttached(), "Selected option is not present")) return;
+
+        // Click the selected option & validate
+        await retryUntil(() => optionBtn.click(), () => expect(optionBtn).toHaveAttribute("aria-pressed", "true"), 3, "Option cannot be selected")
 
         // Hover over the button to enable it
         const priceBtn = page.getByLabel("Check today’s price")
-        await expect(priceBtn).toBeAttached()
-        await enablePriceButtonWitHover(page, priceBtn)
+        await validate(() => expect(priceBtn).toBeAttached(), "Check price button is not present")
+        await retryUntil(() => enablePriceButtonWitHover(page, priceBtn), () => expect(priceBtn).toBeEnabled(), 3, "Cannot enable Check Price button")
 
         // Try scraping with max retries
         const [done, price] = await getPriceWithRetry(page, maxRetries)
@@ -59,8 +64,6 @@ async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
     We do a humanlike hover over the price button to enable it. We do a minimum of 8 movements and staty for atleast 600ms.
     Playwright's hover doesn't work.
      */
-    await expect(priceBtn).toBeAttached()
-
     const box = await priceBtn.boundingBox();
 
     if (!box) throw new Error('No bounding box');
@@ -90,22 +93,16 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
     const priceBtn = page.getByLabel("Check today’s price")
     const retryBtn = page.getByRole("button", { name: "Retry" })
 
-    await priceBtn.click()
-
-    try { await expect(priceBtn).not.toBeAttached() }
-
+    await retryUntil(() => priceBtn.click(), () => expect(priceBtn).not.toBeAttached({ timeout: 2000 }), 3, "Check today's price Button cannot be clicked.")
 
     for (let i = 0; i < maxRetries; i++) {
-        try {
-            const [done, price] = await getPrice(page)
-            if (done) return [true, price];
+        const [done, price] = await getPrice(page)
+        if (done) return [true, price];
 
-            await expect(retryBtn).toBeAttached()
+        await validate(() => expect(retryBtn).toBeAttached({ timeout: 2000 }), "Retry Button not found")
 
-            await sleep(Math.pow(2, i) * 1000)
-            await retryBtn.click()
-        }
-        catch (e) { }
+        await sleep(Math.pow(2, i) * 1000)
+        await retryUntil(() => retryBtn.click(), () => expect(retryBtn).not.toBeAttached({ timeout: 2000 }), 3, "Could not retry the price check")
     }
     return [false, -1]
 }
@@ -113,21 +110,20 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
 async function getPrice(page: Page) {
     const offerPanel = page.locator('div.offer-panel')
     // Wait for it show success or fail
-    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed|offer-locked)(?:\s|$)/, { timeout: 15000 })
+    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+
     const classes = await offerPanel.getAttribute("class")
+
     if (classes?.includes("offer-ready")) {
         const offerRow = page.locator("div.offer-row")
         const price = await cleanPrice(offerRow)
         return [true, price]
     }
     else if (classes?.includes("offer-failed")) {
-        console.warn("[FAILURE] Retrying...\n\n")
-    }
-    else if (classes?.includes("offer-locked")) {
-        console.warn("[FAILURE] Price Button not clicked...")
+        console.warn("Price check failed upstream. Retrying...\n\n")
     }
     else {
-        console.warn("[FAILURE] Unreachable")
+        console.warn("Unreachable code")
     }
     return [false, -1]
 }
@@ -142,12 +138,9 @@ async function cleanPrice(offerRow: Locator) {
         if (classes?.includes("line-through")) continue; // Strike through prices
         if (innerText.includes("%")) continue; // Ignore X% Savings
         if (/[a-z]/i.test(innerText)) continue // Ignore other alphabetical text
-        return innerText
+        return fixPrice(innerText)
     }
 }
 
-Promise.allSettled(products.map(
-    (product) => {
-        init(`https://demo.inelabteamdev.com/item/${product.id}`, product.option, maxRetries)
-    }
-))
+
+await init()
