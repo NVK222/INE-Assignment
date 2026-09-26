@@ -1,9 +1,24 @@
-import { chromium, type Locator, type Page } from "playwright"
+import { type Browser, chromium, type Locator, type Page } from "playwright"
 import { expect } from "@playwright/test"
 
-async function scrape(url: string, selectedOption: string, maxRetries: number) {
+const products = [
+    { id: 2224, option: "Duo pack" },
+    { id: 2789, option: "Stage bundle" },
+    { id: 2235, option: "1-pack" },
+    { id: 2111, option: "Regular" }
+]
+
+const maxRetries = 4
+
+async function init(url: string, selectedOption: string, maxRetries: number) {
     const browser = await chromium.launch({ headless: false })
-    const page = await browser.newPage()
+    await scrape(browser, url, selectedOption, maxRetries)
+    await browser.close()
+}
+
+async function scrape(browser: Browser, url: string, selectedOption: string, maxRetries: number) {
+    const browserCtx = await browser.newContext()
+    const page = await browserCtx.newPage()
     await page.goto(url)
 
     // Deal with cookie popup
@@ -16,7 +31,6 @@ async function scrape(url: string, selectedOption: string, maxRetries: number) {
         // Select the option
         const optionBtn = page.getByRole("button", { name: selectedOption })
         await expect(optionBtn).toBeAttached()
-
         await optionBtn.click()
         await expect(optionBtn).toHaveAttribute("aria-pressed", "true")
 
@@ -35,7 +49,9 @@ async function scrape(url: string, selectedOption: string, maxRetries: number) {
         if (e instanceof Error) console.error(e.message)
         else console.error("Unknown error occured")
     }
-    finally { await browser.close() }
+    finally {
+        await browserCtx.close()
+    }
 }
 
 async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
@@ -72,16 +88,24 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
     const priceBtn = page.getByLabel("Check today’s price")
-    await priceBtn.click()
-
     const retryBtn = page.getByRole("button", { name: "Retry" })
 
+    await priceBtn.click()
+
+    try { await expect(priceBtn).not.toBeAttached() }
+
+
     for (let i = 0; i < maxRetries; i++) {
-        const [done, price] = await getPrice(page)
-        if (done) return [true, price];
-        sleep(Math.pow(2, i))
-        await expect(retryBtn).toBeAttached()
-        await retryBtn.click()
+        try {
+            const [done, price] = await getPrice(page)
+            if (done) return [true, price];
+
+            await expect(retryBtn).toBeAttached()
+
+            await sleep(Math.pow(2, i) * 1000)
+            await retryBtn.click()
+        }
+        catch (e) { }
     }
     return [false, -1]
 }
@@ -89,16 +113,20 @@ async function getPriceWithRetry(page: Page, maxRetries: number) {
 async function getPrice(page: Page) {
     const offerPanel = page.locator('div.offer-panel')
     // Wait for it show success or fail
-    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed|offer-locked)(?:\s|$)/, { timeout: 15000 })
     const classes = await offerPanel.getAttribute("class")
     if (classes?.includes("offer-ready")) {
         const offerRow = page.locator("div.offer-row")
-        console.log("[SUCCESS] Price is:")
         const price = await cleanPrice(offerRow)
         return [true, price]
-    } else if (classes?.includes("offer-failed")) {
+    }
+    else if (classes?.includes("offer-failed")) {
         console.warn("[FAILURE] Retrying...\n\n")
-    } else {
+    }
+    else if (classes?.includes("offer-locked")) {
+        console.warn("[FAILURE] Price Button not clicked...")
+    }
+    else {
         console.warn("[FAILURE] Unreachable")
     }
     return [false, -1]
@@ -110,13 +138,16 @@ async function cleanPrice(offerRow: Locator) {
         const el = children.nth(i)
         const classes = await el.getAttribute("style")
         const innerText = await el.innerText()
+
         if (classes?.includes("line-through")) continue; // Strike through prices
         if (innerText.includes("%")) continue; // Ignore X% Savings
         if (/[a-z]/i.test(innerText)) continue // Ignore other alphabetical text
-
-        console.log(innerText)
         return innerText
     }
 }
 
-scrape("https://demo.inelabteamdev.com/item/2507", "Regular", 4)
+Promise.allSettled(products.map(
+    (product) => {
+        init(`https://demo.inelabteamdev.com/item/${product.id}`, product.option, maxRetries)
+    }
+))
