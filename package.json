@@ -2,6 +2,7 @@
   "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/cors": "^2.8.19",
     "@types/node": "^26.6.2",
     "cross-env": "^10.1.0",
     "playwright": "^1.63.0",
@@ -14,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "@types/express": "^5.0.6",
+    "cors": "^2.8.6",
     "express": "^5.2.1"
   }
 }

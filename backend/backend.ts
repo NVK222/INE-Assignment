@@ -4,6 +4,7 @@ import { scrapeProducts } from "./scraper/scraper.ts"
 import type { ProductFullDetails, ScrapeRequestProduct } from './types.ts'
 import { supabase } from './db/db.ts'
 import { PostgrestError } from '@supabase/supabase-js'
+import cors from 'cors'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3000)
@@ -11,6 +12,7 @@ const baseURL = "https://demo.inelabteamdev.com"
 
 const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0' })
 
+app.use(cors())
 app.use(express.json())
 
 
