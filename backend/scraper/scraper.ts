@@ -18,12 +18,27 @@ export async function scrapeProducts(browser: Browser, products: ScrapeRequestPr
 
             const product = products[index]
 
-            results[index] = await scrapeProduct(
-                browser,
-                product.product_id,
-                product.option,
-                maxRetries
-            )
+            try {
+                results[index] = await scrapeProduct(
+                    browser,
+                    product.product_id,
+                    product.option,
+                    maxRetries
+                )
+            }
+            catch (e) {
+                console.error(`Unexpected scraper failure for product ${product.product_id}:`, e)
+                results[index] = {
+                    outcome: "FAILED",
+                    price: null,
+                    stock: null,
+                    retries: maxRetries,
+                    name: "Unknown",
+                    product_id: product.product_id,
+                    option: product.option,
+                    scraped_at: new Date().toISOString()
+                }
+            }
         }
     }
 
@@ -47,27 +62,26 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         })
     }
     const page = await browserCtx.newPage()
+    let nameOfProduct = "Unknown"
 
     // A GET request to the api/v2/ui/manifest returns a respons that contains classes for prices
-    const manifestPromise = page.waitForResponse(response => response.request().method() === "GET" && response.request().url().includes("ui/manifest"))
-    await page.goto(url)
-    const manifestResponse = await manifestPromise
-    const manifestData = await manifestResponse.json()
-
-    const stockClass: string = manifestData.classes.stock
-    const actualPriceClass: string = manifestData.classes.priceValue
-
-    const cookieRejectLabel = page.getByLabel("Reject cookies")
-
-    const printer = (msg: string) => `[FAILURE] Product ID:  ${id}\tReason: ` + msg
-
-    // Deal with cookie popup
-    await page.addLocatorHandler(cookieRejectLabel, async () => {
-        await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), maxRetries, "Cannot close cookie popup.")
-    })
-
-    const nameOfProduct = await getProductName(id.toString())
     try {
+        const manifestPromise = page.waitForResponse(response => response.request().method() === "GET" && response.request().url().includes("ui/manifest"))
+        await page.goto(url)
+        const manifestResponse = await manifestPromise
+        const manifestData = await manifestResponse.json()
+
+        const stockClass: string = manifestData.classes.stock
+        const actualPriceClass: string = manifestData.classes.priceValue
+
+        const cookieRejectLabel = page.getByLabel("Reject cookies")
+
+        // Deal with cookie popup
+        await page.addLocatorHandler(cookieRejectLabel, async () => {
+            await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), maxRetries, "Cannot close cookie popup.")
+        })
+
+        nameOfProduct = await getProductName(id.toString())
         //Check if product exists
         const pageError = page.getByText("Error: product 404")
         await validate(() => expect(pageError).not.toBeAttached(), "Product does not exist")
@@ -94,7 +108,7 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         else throw new Error("Scraping was unsuccesful. ");
     }
     catch (e) {
-        if (e instanceof Error) console.error(printer(e.message))
+        if (e instanceof Error) console.error((`[FAILURE] Product ID:  ${id}\tReason: ${e.message}`))
         else console.error("Unknown error occured")
         return {
             outcome: "FAILED",
@@ -201,7 +215,7 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
             await page.getByRole("button", { name: "Retry" }).isVisible().catch(() => false)
         )
 
-        throw new Error("Price request took more than 15s", { cause: e })
+        throw new Error("Price request took more than 30s", { cause: e })
     }
 
     const classes = await offerPanel.getAttribute("class")

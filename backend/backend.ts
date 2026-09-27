@@ -52,6 +52,15 @@ app.get("/api/scrape", async (req, res) => {
 
 
         const results = await scrapeProducts(browser, products, 3, 4)
+        console.log(
+            "Results:",
+            results.map((r, i) => ({
+                index: i,
+                product_id: products[i].product_id,
+                defined: r !== undefined,
+                stock: r?.stock
+            }))
+        )
         const { error: insertError } = await supabase.from("testing_scraped_data").insert(
             results.map(result => ({
                 product_id: result.product_id,
