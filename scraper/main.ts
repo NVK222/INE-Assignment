@@ -4,6 +4,7 @@ import { fixPrice, retryUntil, validate } from "./utils.ts"
 import type { ScrapeRequestProduct, ScrapeResult } from "./types.ts"
 
 const BASEURL = "https://demo.inelabteamdev.com/item"
+const baseURL = "https://demo.inelabteamdev.com"
 
 export async function scrapeProducts(browser: Browser, products: ScrapeRequestProduct[], concurrency: number, maxRetries: number) {
     const results: ScrapeResult[] = new Array(products.length)
@@ -19,7 +20,7 @@ export async function scrapeProducts(browser: Browser, products: ScrapeRequestPr
 
             results[index] = await scrapeProduct(
                 browser,
-                product.id,
+                product.product_id,
                 product.option,
                 maxRetries
             )
@@ -65,6 +66,7 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         await retryUntil(() => cookieRejectLabel.click(), () => expect(cookieRejectLabel).not.toBeAttached(), maxRetries, "Cannot close cookie popup.")
     })
 
+    const nameOfProduct = await getProductName(id.toString())
     try {
         //Check if product exists
         const pageError = page.getByText("Error: product 404")
@@ -86,9 +88,9 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         const res = await getPriceWithRetry(page, maxRetries, actualPriceClass, stockClass)
         shouldTrace = true
 
-        if (res.successful) {
+        if (res.outcome != "FAILED") {
             console.log(`Product ID: ${id}\t\tPrice: ${res.price}\t\tOption: ${selectedOption}`)
-            return res
+            return { ...res, name: nameOfProduct, product_id: id, option: selectedOption, scraped_at: new Date().toISOString() }
         }
         else throw new Error("Scraping was unsuccesful. ");
     }
@@ -96,10 +98,14 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         if (e instanceof Error) console.error(printer(e.message))
         else console.error("Unknown error occured")
         return {
-            successful: false,
-            price: -1,
-            stock: -1,
-            retries: -1
+            outcome: "FAILED",
+            price: null,
+            stock: null,
+            retries: -1,
+            name: nameOfProduct,
+            product_id: id,
+            option: selectedOption,
+            scraped_at: new Date().toISOString()
         }
     }
     finally {
@@ -155,7 +161,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClas
     for (let i = 0; i < maxRetries; i++) {
         const data = await getDetails(page, actualPriceClass, stockClass)
 
-        if (data.successful) return { ...data, retries: i };
+        if (data.outcome !== "FAILED") return { ...data, retries: i, outcome: i === 0 ? "SUCCESS" : "RETRIED" };
 
         await validate(() => expect(retryBtn).toBeAttached({ timeout: 2000 }), "Retry Button not found")
 
@@ -163,7 +169,7 @@ async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClas
         await retryUntil(() => retryBtn.click(), () => expect(retryBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Could not retry the price check")
     }
     return {
-        successful: false,
+        outcome: "FAILED",
         price: -1,
         stock: -1,
         retries: maxRetries
@@ -179,11 +185,10 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
 
     if (classes?.includes("offer-ready")) {
         const priceStr = fixPrice(await page.locator(`.${actualPriceClass}`).innerText())
-        console.log(priceStr)
         const price = Number(priceStr)
         const stockEl = await page.locator(`.${stockClass}`).innerText()
         if (stockEl === 'SOLD OUT') return {
-            successful: true,
+            outcome: "SUCCESS",
             price: price,
             stock: 0
         }
@@ -191,7 +196,7 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
         if (!stockRegex) throw new Error("Stock could not be scraped")
         const stock = Number(stockRegex[0])
         return {
-            successful: true,
+            outcome: "SUCCESS",
             price: price,
             stock: stock
         }
@@ -203,8 +208,23 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
         console.warn("Unreachable code")
     }
     return {
-        successful: false,
+        outcome: "FAILED",
         price: -1,
         stock: -1
+    }
+}
+
+export async function getProductName(id: string) {
+    try {
+        const response = await fetch(`${baseURL}/api/v2/items/${id}`)
+        console.log(response)
+        console.log(`${baseURL}/api/v2/items/${id}`)
+        if (!response.ok) throw new Error("Could not fetch product details")
+        const data = await response.json()
+        const name: string = data.name
+        return name
+    }
+    catch (e) {
+        throw e
     }
 }

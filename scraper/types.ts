@@ -1,13 +1,17 @@
 export interface ScrapeRequestProduct {
-    id: number,
+    product_id: number,
     option: string
 }
 
 export interface ScrapeResult {
-    successful: boolean,
-    price: number,
-    stock: number,
-    retries: number
+    outcome: string,
+    price: number | null,
+    stock: number | null,
+    retries: number,
+    name: string
+    product_id: number
+    option: string
+    scraped_at: string
 }
 
 export interface ProductFullDetails {
