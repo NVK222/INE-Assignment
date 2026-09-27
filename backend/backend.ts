@@ -24,19 +24,7 @@ app.post("/api/test", async (req, res) => {
         const productsToScrape: ScrapeRequestProduct[] = req.body
         const slowMo = Number(req.query.slowMo ?? 0)
         const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0', slowMo: slowMo })
-        const results = await scrapeProducts(browser, productsToScrape, 3, 4)
-        const { error } = await supabase.from("scraped_data").insert(
-            results.map(result => ({
-                product_id: result.product_id,
-                option: result.option,
-                name: result.name,
-                price: result.price,
-                stock: result.stock,
-                scraped_at: result.scraped_at,
-                outcome: result.outcome
-            }))
-        )
-        if (error) throw error
+        const results = await scrapeProducts(browser, productsToScrape, Number(process.env.CONCURRENCY ?? '1'), 4)
         return res.status(200).json(results)
     }
     catch (e) {
