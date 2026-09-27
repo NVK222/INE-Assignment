@@ -37,8 +37,15 @@ export default function App() {
   const isDashboard = window.location.pathname === "/dashboard"
 
   useEffect(() => {
+    if (!localStorage.getItem("backend-notice-shown")) {
+      alert(
+        "The server may take a few seconds to start when opening the site for the first time."
+      )
+      localStorage.setItem("backend-notice-shown", "true")
+    }
+  }, [])
+  useEffect(() => {
     setLoading(true)
-
     getProducts(page, 20, search)
       .then((data) => {
         setProducts(data.results)

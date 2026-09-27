@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_API_URL ?? "http//localhost:3000"
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000"
 
 export type Product = {
     id: number
@@ -60,8 +60,8 @@ export async function getProducts(page: number, limit = 20, search = "") {
     if (search.trim()) {
         params.set("search", search.trim())
     }
-    const response = await fetch(
-        `${API_URL}/api/products?${params}`
+    const response = await apiFetch(
+        `/api/products?${params}`
     )
 
     if (!response.ok) {
@@ -150,4 +150,34 @@ export async function removeTrackedProduct(
             data?.error ?? "Failed to remove tracked product"
         )
     }
+}
+
+async function apiFetch(
+    path: string,
+    options?: RequestInit,
+    retries = 3
+) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const response = await fetch(`${API_URL}${path}`, options)
+
+            if (response.ok) {
+                return response
+            }
+
+            if (response.status !== 502 && response.status !== 503 && response.status !== 504) {
+                return response
+            }
+        } catch (error) {
+            if (attempt === retries) {
+                throw error
+            }
+        }
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 2000)
+        )
+    }
+
+    throw new Error("Backend is unavailable")
 }
