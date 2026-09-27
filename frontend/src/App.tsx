@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react"
 import {
+  getDashboardProducts,
+  getProductHistory,
+  removeTrackedProduct,
   getProduct,
   getProducts,
   trackProduct,
   type Product,
   type ProductDetails,
+  type DashboardProduct,
+  type ScrapeAttempt
 } from "./api.ts"
 import ProductList from "./components/ProductList.tsx"
 import ProductDetailsView from "./components/ProductDetails.tsx"
+import Dashboard from "./components/Dashboard.tsx"
+import DashboardDetails from "./components/DashboardDetails.tsx"
 
 export default function App() {
   const [page, setPage] = useState(1)
@@ -19,10 +26,15 @@ export default function App() {
   const [totalPages, setTotalPages] = useState(1)
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [productDetails, setProductDetails] =
-    useState<ProductDetails | null>(null)
+  const [productDetails, setProductDetails] = useState<ProductDetails | null>(null)
 
   const [loading, setLoading] = useState(false)
+
+  const [dashboardProducts, setDashboardProducts] = useState<DashboardProduct[]>([])
+
+  const [dashboardProduct, setDashboardProduct] = useState<DashboardProduct | null>(null)
+  const [dashboardHistory, setDashboardHistory] = useState<ScrapeAttempt[]>([])
+  const isDashboard = window.location.pathname === "/dashboard"
 
   useEffect(() => {
     setLoading(true)
@@ -71,6 +83,67 @@ export default function App() {
     await trackProduct(selectedProduct.id, option)
   }
 
+  async function openDashboardProduct(product: DashboardProduct) {
+    setDashboardProduct(product)
+    setDashboardHistory([])
+    setLoading(true)
+
+    try {
+      const history = await getProductHistory(
+        product.id,
+        product.option
+      )
+
+      setDashboardHistory(history)
+    } catch (error) {
+      console.error(
+        "Failed to fetch dashboard history:",
+        error
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isDashboard) return
+
+    setLoading(true)
+
+    getDashboardProducts()
+      .then(setDashboardProducts)
+      .catch((error) => {
+        console.error(
+          "Failed to fetch dashboard products:",
+          error
+        )
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [isDashboard])
+
+  async function removeDashboardProduct(
+    product: DashboardProduct
+  ) {
+    try {
+      await removeTrackedProduct(product.id, product.option)
+
+      setDashboardProducts((current) =>
+        current.filter(
+          (item) =>
+            item.id !== product.id ||
+            item.option !== product.option
+        )
+      )
+    } catch (error) {
+      console.error(
+        "Failed to remove tracked product:",
+        error
+      )
+    }
+  }
+
   if (selectedProduct) {
     return (
       <ProductDetailsView
@@ -80,6 +153,45 @@ export default function App() {
         onBack={goBack}
         onTrack={trackSelectedProduct}
       />
+    )
+  }
+
+  if (isDashboard) {
+    if (dashboardProduct) {
+      return (
+        <main
+          style={{
+            maxWidth: "1000px",
+            margin: "40px auto",
+          }}
+        >
+          <DashboardDetails
+            product={dashboardProduct}
+            history={dashboardHistory}
+            loading={loading}
+            onBack={() => {
+              setDashboardProduct(null)
+              setDashboardHistory([])
+            }}
+          />
+        </main>
+      )
+    }
+
+    return (
+      <main
+        style={{
+          maxWidth: "1000px",
+          margin: "40px auto",
+        }}
+      >
+        <Dashboard
+          products={dashboardProducts}
+          loading={loading}
+          onSelect={openDashboardProduct}
+          onRemove={removeDashboardProduct}
+        />
+      </main>
     )
   }
 

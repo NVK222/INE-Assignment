@@ -184,6 +184,192 @@ app.post("/api/track", async (req, res) => {
     }
 })
 
+app.get("/api/dashboard/export", async (_req, res) => {
+    try {
+        const { data: logs, error } = await supabase
+            .from("scraped_data")
+            .select(
+                "product_id, option, name, price, stock, scraped_at, outcome"
+            )
+            .order("scraped_at", { ascending: true })
+
+        if (error) throw error
+
+        const headers = [
+            "product_id",
+            "option",
+            "name",
+            "price",
+            "stock",
+            "scraped_at",
+            "outcome",
+        ]
+
+        const escapeCsv = (value: unknown) => {
+            if (value === null || value === undefined) {
+                return ""
+            }
+
+            const stringValue = String(value)
+
+            if (
+                stringValue.includes(",") ||
+                stringValue.includes('"') ||
+                stringValue.includes("\n")
+            ) {
+                return `"${stringValue.replaceAll('"', '""')}"`
+            }
+
+            return stringValue
+        }
+
+        const csv = [
+            headers.join(","),
+            ...(logs ?? []).map((log) =>
+                headers
+                    .map((header) =>
+                        escapeCsv(
+                            log[header as keyof typeof log]
+                        )
+                    )
+                    .join(",")
+            ),
+        ].join("\n")
+
+        res.setHeader("Content-Type", "text/csv")
+        res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="scrape-logs.csv"'
+        )
+
+        return res.status(200).send(csv)
+    } catch (e) {
+        console.error("Error exporting scrape logs")
+
+        return res.status(500).json({
+            error:
+                e instanceof Error
+                    ? e.message
+                    : "Unknown error occurred while exporting logs",
+        })
+    }
+})
+
+app.get("/api/dashboard", async (_req, res) => {
+    try {
+        const { data: tracked, error: trackedError } = await supabase
+            .from("tracked")
+            .select("product_id, option")
+
+        if (trackedError) throw trackedError
+
+        if (!tracked || tracked.length === 0) {
+            return res.status(200).json([])
+        }
+
+        const results = []
+
+        for (const item of tracked) {
+            const response = await fetch(
+                `${baseURL}/api/v2/items/${item.product_id}`
+            )
+
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch product ${item.product_id}`
+                )
+            }
+
+            const product = await response.json()
+
+            results.push({
+                id: product.id,
+                name: product.name,
+                brand: product.brand,
+                category: product.category,
+                option: item.option,
+            })
+        }
+
+        return res.status(200).json(results)
+    } catch (e) {
+        console.error("Error fetching dashboard")
+
+        return res.status(500).json({
+            error:
+                e instanceof Error
+                    ? e.message
+                    : "Unknown error occurred while fetching dashboard",
+        })
+    }
+})
+
+app.get("/api/dashboard/:productId", async (req, res) => {
+    const productId = Number(req.params.productId)
+    const option = String(req.query.option ?? "")
+
+    if (!Number.isInteger(productId) || !option) {
+        return res.status(400).json({
+            error: "productId and option are required",
+        })
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from("scraped_data")
+            .select("scraped_at, price, stock, outcome")
+            .eq("product_id", productId)
+            .eq("option", option)
+            .order("scraped_at", { ascending: true })
+
+        if (error) throw error
+
+        return res.status(200).json(data ?? [])
+    } catch (e) {
+        console.error("Error fetching dashboard history")
+
+        return res.status(500).json({
+            error:
+                e instanceof Error
+                    ? e.message
+                    : "Unknown error occurred while fetching history",
+        })
+    }
+})
+
+app.delete("/api/tracked", async (req, res) => {
+    const { product_id, option } = req.body
+
+    if (!product_id || !option) {
+        return res.status(400).json({
+            error: "product_id and option are required",
+        })
+    }
+
+    try {
+        const { error } = await supabase
+            .from("tracked")
+            .delete()
+            .eq("product_id", product_id)
+            .eq("option", option)
+
+        if (error) throw error
+
+        return res.status(204).send()
+    } catch (e) {
+        console.error("Error removing tracked product")
+
+        return res.status(500).json({
+            error:
+                e instanceof Error
+                    ? e.message
+                    : "Unknown error occurred while removing tracked product",
+        })
+    }
+})
+
+
+
 app.get("/api/health", (req, res) => {
     return res.status(200).json({
         "health": "ok"
