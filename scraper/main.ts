@@ -1,35 +1,45 @@
-import { type Browser, chromium, type Locator, type Page } from "playwright"
+import { type Browser, type Locator, type Page } from "playwright"
 import { expect } from "@playwright/test"
 import { fixPrice, retryUntil, validate } from "./utils.ts"
+import type { ScrapeRequestProduct, ScrapeResult } from "./types.ts"
 
-const tracingEnabled = process.env.TRACE === "1"
-if (tracingEnabled) console.log("===== Starting TRACING =====")
-
-const products = [
-    { id: 2121, option: "Oak" },
-    { id: 2789, option: "Stage bundle" },
-    { id: 2235, option: "1-pack" },
-    { id: 2111, option: "Regular" }
-]
-
-const maxRetries = 4
 const BASEURL = "https://demo.inelabteamdev.com/item"
 
-async function init() {
-    const browser = await chromium.launch({ headless: false })
-    await Promise.allSettled(products.map(
-        (product) => scrape(browser, product.id, product.option, maxRetries)
-    ))
-    await browser.close()
+export async function scrapeProducts(browser: Browser, products: ScrapeRequestProduct[], concurrency: number, maxRetries: number) {
+    const results: ScrapeResult[] = new Array(products.length)
+    let nextIdx = 0
+    async function worker() {
+        while (true) {
+            const index = nextIdx++
+            if (index >= products.length) {
+                return
+            }
+
+            const product = products[index]
+
+            results[index] = await scrapeProduct(
+                browser,
+                product.id,
+                product.option,
+                maxRetries
+            )
+        }
+    }
+
+    await Promise.all(Array.from(
+        { length: Math.min(concurrency, products.length) },
+        () => worker()))
+
+    return results
 }
 
-async function scrape(browser: Browser, id: number, selectedOption: string, maxRetries: number) {
+async function scrapeProduct(browser: Browser, id: number, selectedOption: string, maxRetries: number): Promise<ScrapeResult> {
     let shouldTrace = false
     const url = `${BASEURL}/${id}`
     const browserCtx = await browser.newContext()
 
 
-    if (tracingEnabled) {
+    if (process.env.TRACING === '1') {
         await browserCtx.tracing.start({
             screenshots: true,
             snapshots: true,
@@ -41,10 +51,10 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
     const manifestPromise = page.waitForResponse(response => response.request().method() === "GET" && response.request().url().includes("ui/manifest"))
     await page.goto(url)
     const manifestResponse = await manifestPromise
-    const mainfestData = await manifestResponse.json()
-    console.log(mainfestData)
-    const actualPriceClass: string = mainfestData.classes.priceValue
-    console.log(actualPriceClass)
+    const manifestData = await manifestResponse.json()
+
+    const stockClass: string = manifestData.classes.stock
+    const actualPriceClass: string = manifestData.classes.priceValue
 
     const cookieRejectLabel = page.getByLabel("Reject cookies")
 
@@ -73,18 +83,27 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
         await retryUntil(() => enablePriceButtonWitHover(page, priceBtn), () => expect(priceBtn).toBeEnabled(), maxRetries, "Cannot enable Check Price button")
 
         // Try scraping with max retries
-        const [done, price] = await getPriceWithRetry(page, maxRetries, actualPriceClass)
+        const res = await getPriceWithRetry(page, maxRetries, actualPriceClass, stockClass)
         shouldTrace = true
 
-        if (done) console.log(`Product ID: ${id}\t\tPrice: ${price}\t\tOption: ${selectedOption}`)
+        if (res.successful) {
+            console.log(`Product ID: ${id}\t\tPrice: ${res.price}\t\tOption: ${selectedOption}`)
+            return res
+        }
         else throw new Error("Scraping was unsuccesful. ");
     }
     catch (e) {
         if (e instanceof Error) console.error(printer(e.message))
         else console.error("Unknown error occured")
+        return {
+            successful: false,
+            price: -1,
+            stock: -1,
+            retries: -1
+        }
     }
     finally {
-        if (tracingEnabled) {
+        if (process.env.TRACING === '1') {
             if (shouldTrace) {
                 await browserCtx.tracing.stop()
             } else {
@@ -93,8 +112,8 @@ async function scrape(browser: Browser, id: number, selectedOption: string, maxR
                 })
             }
         }
+        await browserCtx.close()
     }
-    await browserCtx.close()
 }
 
 async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
@@ -122,7 +141,7 @@ async function enablePriceButtonWitHover(page: Page, priceBtn: Locator) {
 }
 
 
-async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClass: string) {
+async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClass: string, stockClass: string) {
     /*
     Try scraping the price with a automatic retries & exponential backoff
      */
@@ -134,18 +153,24 @@ async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClas
     await retryUntil(() => priceBtn.click(), () => expect(priceBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Check today's price Button cannot be clicked.")
 
     for (let i = 0; i < maxRetries; i++) {
-        const [done, price] = await getPrice(page, actualPriceClass)
-        if (done) return [true, price];
+        const data = await getDetails(page, actualPriceClass, stockClass)
+
+        if (data.successful) return { ...data, retries: i };
 
         await validate(() => expect(retryBtn).toBeAttached({ timeout: 2000 }), "Retry Button not found")
 
         await sleep(Math.pow(2, i) * 1000)
         await retryUntil(() => retryBtn.click(), () => expect(retryBtn).not.toBeAttached({ timeout: 2000 }), maxRetries, "Could not retry the price check")
     }
-    return [false, -1]
+    return {
+        successful: false,
+        price: -1,
+        stock: -1,
+        retries: maxRetries
+    }
 }
 
-async function getPrice(page: Page, actualPriceClass: string) {
+async function getDetails(page: Page, actualPriceClass: string, stockClass: string) {
     const offerPanel = page.locator('div.offer-panel')
     // Wait for it show success or fail
     await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
@@ -153,8 +178,23 @@ async function getPrice(page: Page, actualPriceClass: string) {
     const classes = await offerPanel.getAttribute("class")
 
     if (classes?.includes("offer-ready")) {
-        const price = fixPrice(await page.locator(`.${actualPriceClass}`).innerText())
-        return [true, price]
+        const priceStr = fixPrice(await page.locator(`.${actualPriceClass}`).innerText())
+        console.log(priceStr)
+        const price = Number(priceStr)
+        const stockEl = await page.locator(`.${stockClass}`).innerText()
+        if (stockEl === 'SOLD OUT') return {
+            successful: true,
+            price: price,
+            stock: 0
+        }
+        const stockRegex = stockEl.match(/\d+/)
+        if (!stockRegex) throw new Error("Stock could not be scraped")
+        const stock = Number(stockRegex[0])
+        return {
+            successful: true,
+            price: price,
+            stock: stock
+        }
     }
     else if (classes?.includes("offer-failed")) {
         console.warn("Price check failed upstream. Retrying...")
@@ -162,8 +202,9 @@ async function getPrice(page: Page, actualPriceClass: string) {
     else {
         console.warn("Unreachable code")
     }
-    return [false, -1]
+    return {
+        successful: false,
+        price: -1,
+        stock: -1
+    }
 }
-
-
-await init()

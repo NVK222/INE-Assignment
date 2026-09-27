@@ -28,6 +28,7 @@ export function fixPrice(text: string) {
         .normalize("NFKC")
         .replace(/[\u200B-\u200D\uFEFF]/g, "")
         .replace(/\s+/g, "")
+        .replace(/,/g, "")
 
     const match = normalized.match(/(?:₹|Rs\.?)([\d,]+(?:\.\d+)?)/i)
 

@@ -8,7 +8,10 @@
     "typescript": "^7.0.2"
   },
   "scripts": {
-    "dev": "node ./scraper/main.ts",
-    "trace": "cross-env TRACE=1 node ./scraper/main.ts"
+    "dev": "node ./scraper/backend.ts"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "express": "^5.2.1"
   }
 }
