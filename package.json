@@ -8,7 +8,8 @@
     "typescript": "^7.0.2"
   },
   "scripts": {
-    "dev": "node ./scraper/backend.ts"
+    "start": "node ./scraper/backend.ts",
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

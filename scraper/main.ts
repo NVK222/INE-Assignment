@@ -89,7 +89,6 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         shouldTrace = true
 
         if (res.outcome != "FAILED") {
-            console.log(`Product ID: ${id}\t\tPrice: ${res.price}\t\tOption: ${selectedOption}`)
             return { ...res, name: nameOfProduct, product_id: id, option: selectedOption, scraped_at: new Date().toISOString() }
         }
         else throw new Error("Scraping was unsuccesful. ");
@@ -217,8 +216,6 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
 export async function getProductName(id: string) {
     try {
         const response = await fetch(`${baseURL}/api/v2/items/${id}`)
-        console.log(response)
-        console.log(`${baseURL}/api/v2/items/${id}`)
         if (!response.ok) throw new Error("Could not fetch product details")
         const data = await response.json()
         const name: string = data.name
