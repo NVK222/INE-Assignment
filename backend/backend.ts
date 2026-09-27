@@ -5,7 +5,9 @@ import type { ProductFullDetails, ScrapeRequestProduct } from './types.ts'
 import { supabase } from './db/db.ts'
 import { PostgrestError } from '@supabase/supabase-js'
 import cors from 'cors'
+import { loadEnvFile } from 'node:process'
 
+loadEnvFile("./.env")
 const app = express()
 const port = Number(process.env.PORT ?? 3000)
 const baseURL = "https://demo.inelabteamdev.com"
