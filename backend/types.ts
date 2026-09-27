@@ -21,5 +21,21 @@ export interface ProductFullDetails {
     brand: string,
     category: string,
     sku: string,
-    description: string
+    description: string,
+    specs: Record<string, string | number>
+    reviews: {
+        id: string
+        author: string
+        rating: number
+        title: string
+        body: string
+        date: string
+        verifiedPurchase: boolean
+        helpfulVotes: number
+    }[]
+    optionAxis: string
+    options: {
+        id: string
+        label: string
+    }[]
 }

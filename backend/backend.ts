@@ -3,6 +3,7 @@ import { chromium } from 'playwright'
 import { scrapeProducts } from "./scraper/scraper.ts"
 import type { ProductFullDetails, ScrapeRequestProduct } from './types.ts'
 import { supabase } from './db/db.ts'
+import { PostgrestError } from '@supabase/supabase-js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3000)
@@ -67,10 +68,10 @@ app.get("/api/scrape", async (req, res) => {
     }
     catch (e) {
         if (!res.headersSent)
-            return res.status(500).json({
-                error: e instanceof Error ? e.message : "Unknown Error occured in scraping products"
-            })
-        else console.error(e instanceof Error ? e.message : "Unknown Error occured in scraping products")
+            if (e instanceof Error || e instanceof PostgrestError) {
+                return res.status(500).json({ error: e.message })
+            }
+            else console.error(e instanceof Error || e instanceof PostgrestError ? e.message : "Unknown Error occured in scraping products")
     }
 })
 
@@ -80,17 +81,76 @@ app.get("/api/products", async (req, res) => {
     const page = Number(req.query.page ?? 1)
 
     const apiURL = `${baseURL}/api/v2/listings?page=${page}&limit=${limit}`
+
     try {
         const response = await fetch(apiURL)
+
         if (!response.ok) throw new Error("Error fetching")
+
         const data = await response.json()
-        const products: ProductFullDetails[] = data.results
-        return res.status(200).json(products)
+        return res.status(200).json({
+            page: data.page,
+            totalPages: data.totalPages,
+            count: data.count,
+            results: data.results,
+        })
     }
     catch (e) {
         console.error("Error fetching products")
-        if (e instanceof Error) return res.status(500).json({ error: e.message })
-        else return res.status(500).json({ error: "Unknown Error Occured in fetching products" })
+
+        if (e instanceof Error) {
+            return res.status(500).json({ error: e.message })
+        }
+
+        return res.status(500).json({
+            error: "Unknown Error Occured in fetching products"
+        })
+    }
+})
+
+app.get("/api/product/:id", async (req, res) => {
+    const apiURL = `${baseURL}/api/v2/items/${req.params.id}`
+    try {
+        const response = await fetch(apiURL)
+        if (!response.ok) throw new Error("Error fetching product detauls")
+        const data: ProductFullDetails = await response.json()
+        return res.status(200).json(data)
+    }
+    catch (e) {
+        console.error("Error fetching product details")
+        if (e instanceof Error) {
+            return res.status(500).json({ error: e.message })
+        }
+        return res.status(500).json({
+            error: "Unknown Error Occured in fetching products"
+        })
+    }
+})
+
+app.post("/api/track", async (req, res) => {
+    const product_id: number = req.body.product_id
+    const option: string = req.body.option
+
+    try {
+        const { error: insertError } = await supabase.from("tracked").insert({
+            product_id: product_id,
+            option: option
+        })
+
+        if (insertError) throw insertError
+
+        return res.status(201).json({
+            message: "Product tracked successfully"
+        })
+    }
+    catch (e) {
+        console.error("Error tracking a product")
+        if (e instanceof Error || e instanceof PostgrestError) {
+            return res.status(500).json({ error: e.message })
+        }
+        return res.status(500).json({
+            error: "Unknown Error Occured in tracking product"
+        })
     }
 })
 
