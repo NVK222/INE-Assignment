@@ -1,8 +1,8 @@
 import express from 'express'
 import { chromium } from 'playwright'
-import { getProductName, scrapeProducts } from "./main.ts"
+import { scrapeProducts } from "./scraper/scraper.ts"
 import type { ProductFullDetails, ScrapeRequestProduct } from './types.ts'
-import { supabase } from './db.ts'
+import { supabase } from './db/db.ts'
 
 const app = express()
 const port = 3000
@@ -12,6 +12,8 @@ const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0' }
 
 app.use(express.json())
 
+
+// Endpoint to scrape products on demand (For Testing)
 app.post("/api/test", async (req, res) => {
     try {
         const productsToScrape: ScrapeRequestProduct[] = req.body
@@ -37,6 +39,7 @@ app.post("/api/test", async (req, res) => {
     }
 })
 
+// Endpoint that scrapes products from tracked table
 app.get("/api/scrape", async (req, res) => {
     try {
         const { data: products, error: selectError } = await supabase.from("tracked").select("product_id, option")
@@ -66,6 +69,7 @@ app.get("/api/scrape", async (req, res) => {
     }
 })
 
+// Fetches products
 app.get("/api/products", async (req, res) => {
     const limit = Number(req.query.limit ?? 20)
     const page = Number(req.query.page ?? 1)

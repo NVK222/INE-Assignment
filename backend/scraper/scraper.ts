@@ -1,7 +1,7 @@
 import { type Browser, type Locator, type Page } from "playwright"
 import { expect } from "@playwright/test"
 import { fixPrice, retryUntil, validate } from "./utils.ts"
-import type { ScrapeRequestProduct, ScrapeResult } from "./types.ts"
+import type { ScrapeRequestProduct, ScrapeResult } from "../types.ts"
 
 const BASEURL = "https://demo.inelabteamdev.com/item"
 const baseURL = "https://demo.inelabteamdev.com"
