@@ -100,7 +100,7 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
             outcome: "FAILED",
             price: null,
             stock: null,
-            retries: -1,
+            retries: maxRetries,
             name: nameOfProduct,
             product_id: id,
             option: selectedOption,
@@ -169,16 +169,22 @@ async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClas
     }
     return {
         outcome: "FAILED",
-        price: -1,
-        stock: -1,
+        price: null,
+        stock: null,
         retries: maxRetries
     }
 }
 
 async function getDetails(page: Page, actualPriceClass: string, stockClass: string) {
     const offerPanel = page.locator('div.offer-panel')
+
     // Wait for it show success or fail
-    await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+    try {
+        await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+    }
+    catch (e) {
+        throw new Error("Price request took more than 15s", { cause: e })
+    }
 
     const classes = await offerPanel.getAttribute("class")
 
@@ -208,8 +214,8 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
     }
     return {
         outcome: "FAILED",
-        price: -1,
-        stock: -1
+        price: null,
+        stock: null
     }
 }
 

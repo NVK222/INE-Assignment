@@ -64,12 +64,13 @@ app.get("/api/scrape", async (req, res) => {
             }))
         )
         if (insertError) throw insertError
-        return res.status(200).json(results)
     }
     catch (e) {
-        return res.status(500).json({
-            error: e instanceof Error ? e.message : "Unknown Error occured in scraping products"
-        })
+        if (!res.headersSent)
+            return res.status(500).json({
+                error: e instanceof Error ? e.message : "Unknown Error occured in scraping products"
+            })
+        else console.error(e instanceof Error ? e.message : "Unknown Error occured in scraping products")
     }
 })
 
