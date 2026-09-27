@@ -51,7 +51,7 @@ app.get("/api/scrape", async (req, res) => {
         res.status(202).json({ message: "Scraping started" })
 
 
-        const results = await scrapeProducts(browser, products, 3, 4)
+        const results = await scrapeProducts(browser, products, Number(process.env.CONCURRENCY) ?? 1, 4)
         const { error: insertError } = await supabase.from("scraped_data").insert(
             results.map(result => ({
                 product_id: result.product_id,
