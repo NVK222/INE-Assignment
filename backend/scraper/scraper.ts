@@ -180,7 +180,7 @@ async function getDetails(page: Page, actualPriceClass: string, stockClass: stri
 
     // Wait for it show success or fail
     try {
-        await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 15000 })
+        await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 30000 })
     }
     catch (e) {
         throw new Error("Price request took more than 15s", { cause: e })
