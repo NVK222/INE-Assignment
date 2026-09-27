@@ -20,6 +20,8 @@ app.use(express.json())
 app.post("/api/test", async (req, res) => {
     try {
         const productsToScrape: ScrapeRequestProduct[] = req.body
+        const slowMo = Number(req.query.slowMo ?? 0)
+        const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0', slowMo: slowMo })
         const results = await scrapeProducts(browser, productsToScrape, 3, 4)
         const { error } = await supabase.from("scraped_data").insert(
             results.map(result => ({
