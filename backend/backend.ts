@@ -18,7 +18,7 @@ app.post("/api/test", async (req, res) => {
     try {
         const productsToScrape: ScrapeRequestProduct[] = req.body
         const results = await scrapeProducts(browser, productsToScrape, 3, 4)
-        const { error } = await supabase.from("scraped_data").insert(
+        const { error } = await supabase.from("testing_scraped_data").insert(
             results.map(result => ({
                 product_id: result.product_id,
                 option: result.option,
@@ -52,7 +52,7 @@ app.get("/api/scrape", async (req, res) => {
 
 
         const results = await scrapeProducts(browser, products, 3, 4)
-        const { error: insertError } = await supabase.from("scraped_data").insert(
+        const { error: insertError } = await supabase.from("testing_scraped_data").insert(
             results.map(result => ({
                 product_id: result.product_id,
                 option: result.option,

@@ -104,7 +104,52 @@ export type Database = {
                 }
                 Relationships: []
             }
+            testing_scraped_data: {
+                Row: {
+                    created_at: string
+                    id: number
+                    name: string
+                    option: string
+                    outcome: string
+                    price: number | null
+                    product_id: number
+                    scraped_at: string
+                    stock: number | null
+                }
+                Insert: {
+                    created_at?: string
+                    id?: number
+                    name: string
+                    option: string
+                    outcome: string
+                    price?: number | null
+                    product_id: number
+                    scraped_at: string
+                    stock?: number | null
+                }
+                Update: {
+                    created_at?: string
+                    id?: number
+                    name?: string
+                    option?: string
+                    outcome?: string
+                    price?: number | null
+                    product_id?: number
+                    scraped_at?: string
+                    stock?: number | null
+                }
+                Relationships: [
+                    {
+                        foreignKeyName: "scraped_data_product_id_fkey"
+                        columns: ["product_id"]
+                        isOneToOne: false
+                        referencedRelation: "tracked"
+                        referencedColumns: ["product_id"]
+                    },
+                ]
+            }
         }
+
         Views: {
             [_ in never]: never
         }
