@@ -1,3 +1,5 @@
+export const API_URL = import.meta.env.VITE_API_URL ?? "http//localhost:3000"
+
 export type Product = {
     id: number
     slug: string
@@ -59,7 +61,7 @@ export async function getProducts(page: number, limit = 20, search = "") {
         params.set("search", search.trim())
     }
     const response = await fetch(
-        `/api/products?${params}`
+        `${API_URL}/api/products?${params}`
     )
 
     if (!response.ok) {
@@ -70,7 +72,7 @@ export async function getProducts(page: number, limit = 20, search = "") {
 }
 
 export async function getProduct(id: number) {
-    const response = await fetch(`/api/product/${id}`)
+    const response = await fetch(`${API_URL}/api/product/${id}`)
 
     if (!response.ok) {
         throw new Error("Failed to fetch product")
@@ -80,7 +82,7 @@ export async function getProduct(id: number) {
 }
 
 export async function trackProduct(product_id: number, option: string) {
-    const response = await fetch(`/api/track`, {
+    const response = await fetch(`${API_URL}/api/track`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -100,7 +102,7 @@ export async function trackProduct(product_id: number, option: string) {
 }
 
 export async function getDashboardProducts() {
-    const response = await fetch("/api/dashboard")
+    const response = await fetch(`${API_URL}/api/dashboard`)
 
     if (!response.ok) {
         throw new Error("Failed to fetch dashboard products")
@@ -116,7 +118,7 @@ export async function getProductHistory(
     const params = new URLSearchParams({ option })
 
     const response = await fetch(
-        `/api/dashboard/${productId}?${params}`
+        `${API_URL}/api/dashboard/${productId}?${params}`
     )
 
     if (!response.ok) {
@@ -130,7 +132,7 @@ export async function removeTrackedProduct(
     productId: number,
     option: string
 ) {
-    const response = await fetch("/api/tracked", {
+    const response = await fetch(`${API_URL}/api/tracked`, {
         method: "DELETE",
         headers: {
             "Content-Type": "application/json",

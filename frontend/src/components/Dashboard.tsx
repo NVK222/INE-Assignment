@@ -1,4 +1,4 @@
-import type { DashboardProduct } from "../api.ts"
+import { API_URL, type DashboardProduct } from "../api.ts"
 
 type Props = {
     products: DashboardProduct[]
@@ -37,7 +37,7 @@ export default function Dashboard({
 
                 <button
                     onClick={() => {
-                        window.location.href = "/api/dashboard/export"
+                        window.location.href = `${API_URL}/api/dashboard/export`
                     }}
                 >
                     Export CSV
