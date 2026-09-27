@@ -70,6 +70,7 @@ async function scrapeProduct(browser: Browser, id: number, selectedOption: strin
         await page.goto(url)
         const manifestResponse = await manifestPromise
         const manifestData = await manifestResponse.json()
+        console.log("[MANIFEST] classes:", manifestData?.classes)
 
         const stockClass: string = manifestData.classes.stock
         const actualPriceClass: string = manifestData.classes.priceValue
