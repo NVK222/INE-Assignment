@@ -177,12 +177,30 @@ async function getPriceWithRetry(page: Page, maxRetries: number, actualPriceClas
 
 async function getDetails(page: Page, actualPriceClass: string, stockClass: string) {
     const offerPanel = page.locator('div.offer-panel')
+    const start = Date.now()
 
     // Wait for it show success or fail
     try {
         await expect(offerPanel).toHaveClass(/(?:^|\s)(?:offer-ready|offer-failed)(?:\s|$)/, { timeout: 30000 })
+        console.log(
+            `[PRICE] Product resolved in ${Date.now() - start}ms`
+        )
     }
     catch (e) {
+        console.error(
+            `[PRICE] Product timed out after ${Date.now() - start}ms`
+        )
+        console.error(
+            "Panel:",
+            await offerPanel.getAttribute("class"),
+            "aria-busy:",
+            await offerPanel.getAttribute("aria-busy")
+        )
+        console.error(
+            "Retry visible:",
+            await page.getByRole("button", { name: "Retry" }).isVisible().catch(() => false)
+        )
+
         throw new Error("Price request took more than 15s", { cause: e })
     }
 
