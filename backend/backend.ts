@@ -79,20 +79,50 @@ app.get("/api/scrape", async (req, res) => {
 app.get("/api/products", async (req, res) => {
     const limit = Number(req.query.limit ?? 20)
     const page = Number(req.query.page ?? 1)
+    const search = String(req.query.search ?? "").trim().toLowerCase()
 
     const apiURL = `${baseURL}/api/v2/listings?page=${page}&limit=${limit}`
 
     try {
-        const response = await fetch(apiURL)
+        if (!search) {
+            const response = await fetch(apiURL)
 
-        if (!response.ok) throw new Error("Error fetching")
+            if (!response.ok) throw new Error("Error fetching")
 
-        const data = await response.json()
+            const data = await response.json()
+            return res.status(200).json({
+                page: data.page,
+                totalPages: data.totalPages,
+                count: data.count,
+                results: data.results,
+            })
+        }
+
+        const allProductsData = await fetch(
+            `${baseURL}/api/v2/listings?page=1&limit=1000`
+        )
+
+        if (!allProductsData.ok) {
+            throw new Error("Error fetching products")
+        }
+
+        const fullData = await allProductsData.json()
+        const allProducts = [...fullData.results]
+
+        const filteredProducts = allProducts.filter((product) => {
+            return (
+                product.name.toLowerCase().includes(search)
+            )
+        })
+
+        const totalPages = Math.ceil(filteredProducts.length / limit)
+        const start = (page - 1) * limit
+
         return res.status(200).json({
-            page: data.page,
-            totalPages: data.totalPages,
-            count: data.count,
-            results: data.results,
+            page,
+            totalPages,
+            count: filteredProducts.length,
+            results: filteredProducts.slice(start, start + limit),
         })
     }
     catch (e) {

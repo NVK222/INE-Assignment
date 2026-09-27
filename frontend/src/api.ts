@@ -35,9 +35,16 @@ type ProductListResponse = {
     results: Product[]
 }
 
-export async function getProducts(page: number, limit = 20) {
+export async function getProducts(page: number, limit = 20, search = "") {
+    const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+    })
+    if (search.trim()) {
+        params.set("search", search.trim())
+    }
     const response = await fetch(
-        `/api/products?page=${page}&limit=${limit}`
+        `/api/products?${params}`
     )
 
     if (!response.ok) {
