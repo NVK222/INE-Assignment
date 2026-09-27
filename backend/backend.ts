@@ -5,7 +5,7 @@ import type { ProductFullDetails, ScrapeRequestProduct } from './types.ts'
 import { supabase } from './db/db.ts'
 
 const app = express()
-const port = 3000
+const port = Number(process.env.PORT ?? 3000)
 const baseURL = "https://demo.inelabteamdev.com"
 
 const browser = await chromium.launch({ headless: process.env.HEADLESS !== '0' })
