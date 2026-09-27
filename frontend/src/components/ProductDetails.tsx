@@ -10,7 +10,6 @@ type Props = {
 }
 
 export default function ProductDetails({
-    product,
     details,
     loading,
     onBack,
