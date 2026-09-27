@@ -157,14 +157,22 @@ export default function App() {
   }
 
   if (isDashboard) {
-    if (dashboardProduct) {
-      return (
-        <main
-          style={{
-            maxWidth: "1000px",
-            margin: "40px auto",
-          }}
-        >
+    return (
+      <main style={{ maxWidth: "1000px", margin: "40px auto" }}>
+        <button onClick={() => {
+          window.location.href = "/"
+        }}>
+          Products
+        </button>
+
+        {!dashboardProduct ? (
+          <Dashboard
+            products={dashboardProducts}
+            loading={loading}
+            onSelect={openDashboardProduct}
+            onRemove={removeDashboardProduct}
+          />
+        ) : (
           <DashboardDetails
             product={dashboardProduct}
             history={dashboardHistory}
@@ -174,29 +182,21 @@ export default function App() {
               setDashboardHistory([])
             }}
           />
-        </main>
-      )
-    }
-
-    return (
-      <main
-        style={{
-          maxWidth: "1000px",
-          margin: "40px auto",
-        }}
-      >
-        <Dashboard
-          products={dashboardProducts}
-          loading={loading}
-          onSelect={openDashboardProduct}
-          onRemove={removeDashboardProduct}
-        />
+        )}
       </main>
     )
   }
 
   return (
+
     <main style={{ maxWidth: "800px", margin: "40px auto" }}>
+      <button
+        onClick={() => {
+          window.location.href = "/dashboard"
+        }}
+      >
+        Dashboard
+      </button>
       <h1>Products</h1>
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
