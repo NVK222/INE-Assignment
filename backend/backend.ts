@@ -30,10 +30,10 @@ app.post("/api/test", async (req, res) => {
             }))
         )
         if (error) throw error
-        res.status(200).json(results)
+        return res.status(200).json(results)
     }
     catch (e) {
-        res.status(500).json({
+        return res.status(500).json({
             error: e instanceof Error ? e.message : "Unknown Error occured in scraping products"
         })
     }
@@ -44,9 +44,13 @@ app.get("/api/scrape", async (req, res) => {
     try {
         const { data: products, error: selectError } = await supabase.from("tracked").select("product_id, option")
         if (selectError) throw selectError
-        if (!products) res.status(200).json({
+        if (!products) return res.status(200).json({
             "message": "No products to scrape"
         })
+
+        res.status(202).json({ message: "Scraping started" })
+
+
         const results = await scrapeProducts(browser, products, 3, 4)
         const { error: insertError } = await supabase.from("scraped_data").insert(
             results.map(result => ({
@@ -60,10 +64,10 @@ app.get("/api/scrape", async (req, res) => {
             }))
         )
         if (insertError) throw insertError
-        res.status(200).json(results)
+        return res.status(200).json(results)
     }
     catch (e) {
-        res.status(500).json({
+        return res.status(500).json({
             error: e instanceof Error ? e.message : "Unknown Error occured in scraping products"
         })
     }
@@ -80,17 +84,17 @@ app.get("/api/products", async (req, res) => {
         if (!response.ok) throw new Error("Error fetching")
         const data = await response.json()
         const products: ProductFullDetails[] = data.results
-        res.status(200).json(products)
+        return res.status(200).json(products)
     }
     catch (e) {
         console.error("Error fetching products")
-        if (e instanceof Error) res.status(500).json({ error: e.message })
-        else res.status(500).json({ error: "Unknown Error Occured in fetching products" })
+        if (e instanceof Error) return res.status(500).json({ error: e.message })
+        else return res.status(500).json({ error: "Unknown Error Occured in fetching products" })
     }
 })
 
 app.get("/api/health", (req, res) => {
-    res.status(200).json({
+    return res.status(200).json({
         "health": "ok"
     })
 })
